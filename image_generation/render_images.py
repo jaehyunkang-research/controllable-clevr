@@ -46,6 +46,7 @@ if INSIDE_BLENDER:
 parser = argparse.ArgumentParser()
 
 # Input options
+parser.add_argument('--output_dir', default='output/sample')
 parser.add_argument('--base_scene_blendfile', default='data/base_scene.blend',
     help="Base blender file on which all scenes are based; includes " +
           "ground plane, lights, and camera.")
@@ -946,8 +947,8 @@ if __name__ == '__main__':
     argv = utils.extract_args()
     args = parser.parse_args(argv)
     # main(args)
-    create_pair(args, num_images=10, output_dir='1st_trial')
-    # render_from_json(args, '/workspace/clevr-dataset-gen/output/scenes/CLEVR_new_000008.json')
+    create_pair(args, num_images=args.num_images, output_dir=args.output_dir)
+
   elif '--help' in sys.argv or '-h' in sys.argv:
     parser.print_help()
   else:

@@ -386,6 +386,34 @@ def render_scene_deterministic(
 
   return scene_struct
 
+def create_pair(args, num_images, output_dir):
+  """
+  TODO : docstring
+
+  """
+  for i in range(num_images):
+    # number of objects to be generated
+    num_objects = random.randint(3, 6)
+    
+    # render base image
+    json_base = render_scene_deterministic(args=args, num_objects=num_objects, output_index=i, output_split='test', output_dir=output_dir)
+    
+    # sample random aug parameters
+    aug = []
+    for o in range(num_objects):
+      # TRANSLATION
+      dx = random.gauss(0, 0.5)
+      dy = random.gauss(0, 0.5)
+
+      # SCALING
+      dz = random.gauss(1, 0.25)
+
+      # COLOR
+      # TODO: COLOR
+      aug.append({'trans' : (dx, dy), 'size' : dz, 'color' : (0,0,0)})
+    
+    render_from_json(args, output_index=i, output_split='test', output_dir=output_dir, json_file=json_base, aug=aug)
+
 def render_from_json(
     args,    
     output_index=0,

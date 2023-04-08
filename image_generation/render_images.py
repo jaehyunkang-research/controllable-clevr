@@ -205,7 +205,69 @@ def main(args):
   with open(args.output_scene_file, 'w') as f:
     json.dump(output, f)
 
+def render_mask(blender_objects, path='flat.png', whole=False):
+  """
+  Render a version of the scene with shading disabled and unique materials
+  assigned to all objects, and return a set of all colors that should be in the
+  rendered image. The image itself is written to path. This is used to ensure
+  that all objects will be visible in the final rendered scene.
 
+  Args:
+            blender_objects (list): List of blender objects
+            path (string): Path of the mask to be saved
+            whole (bool): If True is passed, it will render each objects as (0, 0, 0).
+                          Otherwise it renders object as (255,255,255). False as default
+  """
+  render_args = bpy.context.scene.render
+
+  # Cache the render args we are about to clobber
+  old_filepath = render_args.filepath
+  old_engine = render_args.engine
+  old_use_antialiasing = render_args.use_antialiasing
+
+  # Override some render settings to have flat shading
+  render_args.filepath = path
+  render_args.engine = 'BLENDER_RENDER'
+  render_args.use_antialiasing = False
+
+  # Move the lights and ground to layer 2 so they don't render
+  utils.set_layer(bpy.data.objects['Lamp_Key'], 2)
+  utils.set_layer(bpy.data.objects['Lamp_Fill'], 2)
+  utils.set_layer(bpy.data.objects['Lamp_Back'], 2)
+  utils.set_layer(bpy.data.objects['Ground'], 2)
+
+  # Add random shadeless materials to all objects
+  old_materials = []
+  for i, obj in enumerate(blender_objects):
+    old_materials.append(obj.data.materials[0])
+    bpy.ops.material.new()
+    mat = bpy.data.materials['Material']
+    mat.name = 'Material_%d' % i
+
+    if whole:
+      mat.diffuse_color = [0, 0, 0]  
+    else:
+      mat.diffuse_color = [255, 255, 255]
+    mat.use_shadeless = True
+    obj.data.materials[0] = mat
+
+  # Render the scene
+  bpy.ops.render.render(write_still=True)
+
+  # Undo the above; first restore the materials to objects
+  for mat, obj in zip(old_materials, blender_objects):
+    obj.data.materials[0] = mat
+
+  # Move the lights and ground back to layer 0
+  utils.set_layer(bpy.data.objects['Lamp_Key'], 0)
+  utils.set_layer(bpy.data.objects['Lamp_Fill'], 0)
+  utils.set_layer(bpy.data.objects['Lamp_Back'], 0)
+  utils.set_layer(bpy.data.objects['Ground'], 0)
+
+  # Set the render settings back to what they were
+  render_args.filepath = old_filepath
+  render_args.engine = old_engine
+  render_args.use_antialiasing = old_use_antialiasing
 
 def render_scene(args,
     num_objects=5,

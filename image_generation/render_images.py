@@ -269,6 +269,123 @@ def render_mask(blender_objects, path='flat.png', whole=False):
   render_args.engine = old_engine
   render_args.use_antialiasing = old_use_antialiasing
 
+def render_scene_deterministic(
+    args,
+    num_objects=5,
+    output_index=0,
+    output_split='test',
+    output_dir='output',
+    output_blendfile=None,
+  ):
+  
+  # Load the main blendfile
+  bpy.ops.wm.open_mainfile(filepath=args.base_scene_blendfile)
+
+  # Load materials
+  utils.load_materials(args.material_dir)
+
+  # Set render arguments so we can get pixel coordinates later.
+  # We use functionality specific to the CYCLES renderer so BLENDER_RENDER
+  # cannot be used.
+
+  output_scene = os.path.join(*[output_dir, 'base', 'scenes', str(output_index).zfill(4)+'.json'])
+  output_image = os.path.join(*[output_dir, 'base', 'images', str(output_index).zfill(4)+'.png'])
+  render_args = bpy.context.scene.render
+  render_args.engine = "CYCLES"
+  render_args.filepath = output_image
+  render_args.resolution_x = args.width
+  render_args.resolution_y = args.height
+  render_args.resolution_percentage = 100
+  render_args.tile_x = args.render_tile_size
+  render_args.tile_y = args.render_tile_size
+  if args.use_gpu == 1:
+    # Blender changed the API for enabling CUDA at some point
+    if bpy.app.version < (2, 78, 0):
+      bpy.context.user_preferences.system.compute_device_type = 'CUDA'
+      bpy.context.user_preferences.system.compute_device = 'CUDA_0'
+    else:
+      cycles_prefs = bpy.context.user_preferences.addons['cycles'].preferences
+      cycles_prefs.compute_device_type = 'CUDA'
+
+  # Some CYCLES-specific stuff
+  bpy.data.worlds['World'].cycles.sample_as_light = True
+  bpy.context.scene.cycles.blur_glossy = 2.0
+  bpy.context.scene.cycles.samples = args.render_num_samples
+  bpy.context.scene.cycles.transparent_min_bounces = args.render_min_bounces
+  bpy.context.scene.cycles.transparent_max_bounces = args.render_max_bounces
+  if args.use_gpu == 1:
+    bpy.context.scene.cycles.device = 'GPU'
+
+  # This will give ground-truth information about the scene and its objects
+  scene_struct = {
+      'split': output_split,
+      'image_index': output_index,
+      'image_filename': os.path.basename(output_image),
+      'objects': [],
+      'directions': {},
+  }
+
+  # Put a plane on the ground so we can compute cardinal directions
+  bpy.ops.mesh.primitive_plane_add(radius=5)
+  plane = bpy.context.object
+
+  # Figure out the left, up, and behind directions along the plane and record
+  # them in the scene structure
+  camera = bpy.data.objects['Camera']
+  plane_normal = plane.data.vertices[0].normal
+  cam_behind = camera.matrix_world.to_quaternion() * Vector((0, 0, -1))
+  cam_left = camera.matrix_world.to_quaternion() * Vector((-1, 0, 0))
+  cam_up = camera.matrix_world.to_quaternion() * Vector((0, 1, 0))
+  plane_behind = (cam_behind - cam_behind.project(plane_normal)).normalized()
+  plane_left = (cam_left - cam_left.project(plane_normal)).normalized()
+  plane_up = cam_up.project(plane_normal).normalized()
+
+  # Delete the plane; we only used it for normals anyway. The base scene file
+  # contains the actual ground plane.
+  utils.delete_object(plane)
+
+  # Save all six axis-aligned directions in the scene struct
+  scene_struct['directions']['behind'] = tuple(plane_behind)
+  scene_struct['directions']['front'] = tuple(-plane_behind)
+  scene_struct['directions']['left'] = tuple(plane_left)
+  scene_struct['directions']['right'] = tuple(-plane_left)
+  scene_struct['directions']['above'] = tuple(plane_up)
+  scene_struct['directions']['below'] = tuple(-plane_up)
+
+  # Now make some random objects
+  objects, blender_objects = add_random_objects(scene_struct, num_objects, args, camera)
+
+  # Render the scene and dump the scene data structure
+  scene_struct['objects'] = objects
+  scene_struct['relationships'] = compute_all_relationships(scene_struct)
+
+  while True:
+    try:
+      bpy.ops.render.render(write_still=True)
+      break
+    except Exception as e:
+      print(e)
+
+  # makedir
+  image_dir = os.path.join(*[output_dir, 'base', 'images'])
+  scene_dir = os.path.join(*[output_dir, 'base', 'scenes'])
+  mask_dir = os.path.join(*[output_dir, 'base', 'masks'])
+  os.makedirs(image_dir, exist_ok=True)
+  os.makedirs(scene_dir, exist_ok=True)
+  os.makedirs(mask_dir, exist_ok=True)
+
+  with open(output_scene, 'w') as f:
+    json.dump(scene_struct, f, indent=2)
+  
+  for i, o in enumerate(blender_objects):
+    path = os.path.join(mask_dir, str(output_index).zfill(4) + '_' + str(i) + '.png')
+    render_mask([o], path, whole=False)
+    
+  path = os.path.join(mask_dir, str(output_index).zfill(4) + '_0.png')
+  render_mask(blender_objects, path, whole=True)
+
+  return scene_struct
+
 def render_scene(args,
     num_objects=5,
     output_index=0,

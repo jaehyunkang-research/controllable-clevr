@@ -9,6 +9,8 @@ from __future__ import print_function
 import math, sys, random, argparse, json, os, tempfile
 from datetime import datetime as dt
 from collections import Counter
+import numpy as np
+import cv2
 
 """
 Renders random scenes using Blender, each with with a random number of objects;
@@ -413,7 +415,8 @@ def create_pair(args, num_images, output_dir):
       aug.append({'trans' : (dx, dy), 'size' : dz, 'color' : (0,0,0)})
     
     render_from_json(args, output_index=i, output_split='test', output_dir=output_dir, json_file=json_base, aug=aug)
-
+    
+    
 def render_from_json(
     args,    
     output_index=0,
@@ -583,7 +586,6 @@ def render_from_json(
   path = os.path.join(mask_dir, str(output_index).zfill(4) + '_0.png')
   render_mask(blender_objects, path, whole=True)
 
-
 def render_scene(args,
     num_objects=5,
     output_index=0,
@@ -592,7 +594,7 @@ def render_scene(args,
     output_scene='render_json',
     output_blendfile=None,
   ):
-
+  
   # Load the main blendfile
   bpy.ops.wm.open_mainfile(filepath=args.base_scene_blendfile)
 
@@ -684,11 +686,13 @@ def render_scene(args,
       bpy.data.objects['Lamp_Fill'].location[i] += rand(args.fill_light_jitter)
 
   # Now make some random objects
+  
   objects, blender_objects = add_random_objects(scene_struct, num_objects, args, camera)
 
   # Render the scene and dump the scene data structure
   scene_struct['objects'] = objects
   scene_struct['relationships'] = compute_all_relationships(scene_struct)
+
   while True:
     try:
       bpy.ops.render.render(write_still=True)
@@ -792,7 +796,6 @@ def add_random_objects(scene_struct, num_objects, args, camera):
     obj = bpy.context.object
     blender_objects.append(obj)
     positions.append((x, y, r))
-
     # Attach a random material
     mat_name, mat_name_out = random.choice(material_mapping)
     utils.add_material(mat_name, Color=rgba)
@@ -801,12 +804,12 @@ def add_random_objects(scene_struct, num_objects, args, camera):
     pixel_coords = utils.get_camera_coords(camera, obj.location)
     objects.append({
       'shape': obj_name_out,
-      'size': size_name,
+      'size': r,
       'material': mat_name_out,
       '3d_coords': tuple(obj.location),
       'rotation': theta,
       'pixel_coords': pixel_coords,
-      'color': color_name,
+      'color': rgba,
     })
 
   # Check that all objects are at least partially visible in the rendered image
@@ -942,7 +945,9 @@ if __name__ == '__main__':
     # Run normally
     argv = utils.extract_args()
     args = parser.parse_args(argv)
-    main(args)
+    # main(args)
+    create_pair(args, num_images=10, output_dir='1st_trial')
+    # render_from_json(args, '/workspace/clevr-dataset-gen/output/scenes/CLEVR_new_000008.json')
   elif '--help' in sys.argv or '-h' in sys.argv:
     parser.print_help()
   else:

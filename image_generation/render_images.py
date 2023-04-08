@@ -46,7 +46,7 @@ if INSIDE_BLENDER:
 parser = argparse.ArgumentParser()
 
 # Input options
-parser.add_argument('--output_dir', default='output/sample')
+parser.add_argument('--output_dir', default='sample')
 parser.add_argument('--base_scene_blendfile', default='data/base_scene.blend',
     help="Base blender file on which all scenes are based; includes " +
           "ground plane, lights, and camera.")
@@ -381,7 +381,7 @@ def render_scene_deterministic(
     json.dump(scene_struct, f, indent=2)
   
   for i, o in enumerate(blender_objects):
-    path = os.path.join(mask_dir, str(output_index).zfill(4) + '_' + str(i) + '.png')
+    path = os.path.join(mask_dir, str(output_index).zfill(4) + '_' + str(i+1) + '.png')
     render_mask([o], path, whole=False)
     
   path = os.path.join(mask_dir, str(output_index).zfill(4) + '_0.png')
@@ -581,7 +581,7 @@ def render_from_json(
     json.dump(scene_struct, f, indent=2)
 
   for i, o in enumerate(blender_objects):
-    path = os.path.join(mask_dir, str(output_index).zfill(4) + '_' + str(i) + '.png')
+    path = os.path.join(mask_dir, str(output_index).zfill(4) + '_' + str(i+1) + '.png')
     render_mask([o], path, whole=False)
     
   path = os.path.join(mask_dir, str(output_index).zfill(4) + '_0.png')
@@ -947,7 +947,7 @@ if __name__ == '__main__':
     argv = utils.extract_args()
     args = parser.parse_args(argv)
     # main(args)
-    create_pair(args, num_images=args.num_images, output_dir=args.output_dir)
+    create_pair(args, num_images=args.num_images, output_dir=os.path.join('output', args.output_dir))
 
   elif '--help' in sys.argv or '-h' in sys.argv:
     parser.print_help()

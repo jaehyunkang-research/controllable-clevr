@@ -46,7 +46,7 @@ if INSIDE_BLENDER:
 parser = argparse.ArgumentParser()
 
 # Input options
-parser.add_argument('--output_dir', default='output/sample')
+parser.add_argument('--output_dir', default='output/test')
 parser.add_argument('--base_scene_blendfile', default='data/base_scene.blend',
     help="Base blender file on which all scenes are based; includes " +
           "ground plane, lights, and camera.")
@@ -155,6 +155,9 @@ parser.add_argument('--render_tile_size', default=256, type=int,
          "rendering may achieve better performance using smaller tile sizes " +
          "while larger tile sizes may be optimal for GPU-based rendering.")
 
+parser.add_argument('--aug_trans', default=0, type=int)
+parser.add_argument('--aug_scale', default=0, type=int)
+parser.add_argument('--aug_color', default=0, type=int)
 def main(args):
   num_digits = 6
   prefix = '%s_%s_' % (args.filename_prefix, args.split)
@@ -397,27 +400,45 @@ def create_pair(args, num_images, output_dir):
   for i in range(num_images):
     # number of objects to be generated
     num_objects = random.randint(3, 6)
-    
     # render base image
     json_base = render_scene_deterministic(args=args, num_objects=num_objects, output_index=i, output_split='test', output_dir=output_dir)
     
-    # sample random aug parameters
-    aug = []
-    for o in range(num_objects):
+    render_from_json(args, output_index=i, output_split='test', output_dir=output_dir, json_file=json_base, aug=True)
+    
+  
+def generate_random_aug(num_objects, translation=None, scaling=None, color=None):
+  # sample random aug parameters
+  aug = []
+
+  
+  for o in range(num_objects):
+    if translation:
       # TRANSLATION
       dx = random.gauss(0, 0.5)
       dy = random.gauss(0, 0.5)
+    else:
+      dx = 0
+      dy = 0
 
+    if scaling:
       # SCALING
       dz = random.gauss(1, 0.25)
+    else:
+      dz = 1
 
+    if color:
       # COLOR
-      # TODO: COLOR
-      aug.append({'trans' : (dx, dy), 'size' : dz, 'color' : (0,0,0)})
-    
-    render_from_json(args, output_index=i, output_split='test', output_dir=output_dir, json_file=json_base, aug=aug)
-    
-    
+      r = random.random()
+      g = random.random()
+      b = random.random()
+      color = (r,g,b)
+    else:
+      color = None
+
+    aug.append({'trans' : (dx, dy), 'size' : dz, 'color' : color})
+
+  return aug
+
 def render_from_json(
     args,    
     output_index=0,
@@ -512,62 +533,81 @@ def render_from_json(
   shape2name = {'cylinder' : 'SmoothCylinder', 'cube' : 'SmoothCube_v2', 'sphere' : 'Sphere'}
   mat2name = {'rubber' : 'Rubber', 'metal' : 'MyMetal'}
   
-  objects = []
-  blender_objects = []
+  base_objects = scene_struct['objects']
+  num_objects = len(base_objects)
+  all_visible = False
 
-  assert len(scene_struct['objects']) == len(aug), "Object number mismatch"
-  for i, object_info in enumerate(scene_struct['objects']):
-    # print(object_info)
-    color = object_info['color']
-    coords_pixel = object_info['pixel_coords']
-    coords_3d = object_info['3d_coords']
-    size = object_info['size']
-    material = object_info['material']
-    shape = object_info['shape']
-    rotation = object_info['rotation']
-    # rgba = color_name_to_rgba[color]
-    rgba = color
-    size_num = coords_3d[2]
-    (x,y) = coords_3d[0:2]
+  while not all_visible:
+    objects = []
+    blender_objects = []
 
-    
+    if aug:
+      random_aug = generate_random_aug(num_objects, translation=args.aug_trans, scaling=args.aug_scale, color=args.aug_color)
 
-    # apply augmentations
-    if aug is not None:
-      aug_params = aug[i]
+    for i, object_info in enumerate(base_objects):
+      # print(object_info)
+      color = object_info['color']
+      coords_pixel = object_info['pixel_coords']
+      coords_3d = object_info['3d_coords']
+      size = object_info['size']
+      material = object_info['material']
+      shape = object_info['shape']
+      rotation = object_info['rotation']
+      # rgba = color_name_to_rgba[color]
+      r,g,b,a = color
+      size_num = coords_3d[2]
+      (x,y) = coords_3d[0:2]
+
+      
+
+      # apply augmentations
+      aug_params = random_aug[i]
       dx, dy = aug_params['trans']
       dz = aug_params['size']
+      if aug_params['color'] is not None:
+        r,g,b = aug_params['color']
       
       x += dx
       y += dy
       size_num *= dz
 
-    utils.add_object(args.shape_dir, shape2name[shape], size_num, (x, y), theta=rotation)
-    obj = bpy.context.object
-    blender_objects.append(obj)
-    pixel_coords = utils.get_camera_coords(camera, obj.location)
-    objects.append({
-      'shape': shape,
-      'size': size_num,
-      'material': material,
-      '3d_coords': tuple(obj.location),
-      'rotation': rotation,
-      'pixel_coords': pixel_coords,
-      'color': rgba,
-    })
+      rgba = (r,g,b,1.0)
 
-    utils.add_material(mat2name[material], Color=rgba)
+      utils.add_object(args.shape_dir, shape2name[shape], size_num, (x, y), theta=rotation)
+      obj = bpy.context.object
+      blender_objects.append(obj)
+      pixel_coords = utils.get_camera_coords(camera, obj.location)
+      objects.append({
+        'shape': shape,
+        'size': size_num,
+        'material': material,
+        '3d_coords': tuple(obj.location),
+        'rotation': rotation,
+        'pixel_coords': pixel_coords,
+        'color': rgba,
+      })
 
-  scene_struct['objects'] = objects
-  scene_struct['relationships'] = compute_all_relationships(scene_struct)
+      utils.add_material(mat2name[material], Color=rgba)
 
-  while True:
-    try:
-      bpy.ops.render.render(write_still=True)
-      break
-    except Exception as e:
-      print(e)
+    scene_struct['objects'] = objects
+    scene_struct['relationships'] = compute_all_relationships(scene_struct)
 
+    while True:
+      try:
+        bpy.ops.render.render(write_still=True)
+        break
+      except Exception as e:
+        print(e)
+
+    all_visible = check_visibility(blender_objects, args.min_pixels_per_object)
+    if not all_visible:
+      # If any of the objects are fully occluded then start over; delete all
+      # objects from the scene and place them all again.
+      print('Some objects are occluded; replacing objects')
+      for obj in blender_objects:
+        utils.delete_object(obj)
+    
+  
   # makedir
   image_dir = os.path.join(*[output_dir, 'aug', 'images'])
   scene_dir = os.path.join(*[output_dir, 'aug', 'scenes'])
@@ -947,7 +987,7 @@ if __name__ == '__main__':
     argv = utils.extract_args()
     args = parser.parse_args(argv)
     # main(args)
-    create_pair(args, num_images=args.num_images, output_dir='output/test')
+    create_pair(args, num_images=args.num_images, output_dir='output/clevr_medium')
 
   elif '--help' in sys.argv or '-h' in sys.argv:
     parser.print_help()

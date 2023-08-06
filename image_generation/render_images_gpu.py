@@ -124,7 +124,7 @@ parser.add_argument('--date', default=dt.today().strftime("%m/%d/%Y"),
          "defaults to today's date")
 
 # Rendering options
-parser.add_argument('--use_gpu', default=0, type=int,
+parser.add_argument('--use_gpu', default=1, type=int,
     help="Setting --use_gpu 1 enables GPU-accelerated rendering using CUDA. " +
          "You must have an NVIDIA GPU with the CUDA toolkit installed for " +
          "to work.")
@@ -317,6 +317,7 @@ def render_scene_deterministic(
     else:
       cycles_prefs = bpy.context.user_preferences.addons['cycles'].preferences
       cycles_prefs.compute_device_type = 'CUDA'
+
 
   # Some CYCLES-specific stuff
   bpy.data.worlds['World'].cycles.sample_as_light = True

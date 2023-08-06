@@ -288,6 +288,7 @@ def render_scene_deterministic(
     output_split='test',
     output_dir='output',
     output_blendfile=None,
+    const=None
   ):
   
   # Load the main blendfile
@@ -299,8 +300,9 @@ def render_scene_deterministic(
   # Set render arguments so we can get pixel coordinates later.
   # We use functionality specific to the CYCLES renderer so BLENDER_RENDER
   # cannot be used.
-  output_scene = os.path.join(*[output_dir, 'base', 'scenes', str(output_index).zfill(4)+'.json'])
-  output_image = os.path.join(*[output_dir, 'base', 'images', str(output_index).zfill(4)+'.png'])
+
+  output_scene = os.path.join(*[output_dir, const[1], 'scenes', str(output_index).zfill(6)+'.json'])
+  output_image = os.path.join(*[output_dir, const[1], 'images', str(output_index).zfill(6)+'.png'])
   render_args = bpy.context.scene.render
   render_args.engine = "CYCLES"
   render_args.filepath = output_image
@@ -365,7 +367,7 @@ def render_scene_deterministic(
   scene_struct['directions']['below'] = tuple(-plane_up)
 
   # Now make some random objects
-  objects, blender_objects = add_random_objects(scene_struct, num_objects, args, camera)
+  objects, blender_objects = add_random_objects(scene_struct, num_objects, args, camera, const=const)
 
   # Render the scene and dump the scene data structure
   scene_struct['objects'] = objects
@@ -379,9 +381,9 @@ def render_scene_deterministic(
       print(e)
 
   # makedir
-  image_dir = os.path.join(*[output_dir, 'base', 'images'])
-  scene_dir = os.path.join(*[output_dir, 'base', 'scenes'])
-  mask_dir = os.path.join(*[output_dir, 'base', 'masks'])
+  image_dir = os.path.join(*[output_dir, const[1], 'images'])
+  scene_dir = os.path.join(*[output_dir, const[1], 'scenes'])
+  mask_dir = os.path.join(*[output_dir, const[1], 'masks'])
   os.makedirs(image_dir, exist_ok=True)
   os.makedirs(scene_dir, exist_ok=True)
   os.makedirs(mask_dir, exist_ok=True)
@@ -390,14 +392,27 @@ def render_scene_deterministic(
     json.dump(scene_struct, f, indent=2)
   
   for i, o in enumerate(blender_objects):
-    path = os.path.join(mask_dir, str(output_index).zfill(4) + '_' + str(i+1) + '.png')
+    path = os.path.join(mask_dir, str(output_index).zfill(6) + '_' + str(i+1) + '.png')
     render_mask([o], path, whole=False)
     
-  path = os.path.join(mask_dir, str(output_index).zfill(4) + '_0.png')
+  path = os.path.join(mask_dir, str(output_index).zfill(6) + '_0.png')
   render_mask(blender_objects, path, whole=True)
 
   return scene_struct
 
+def create_same_pair(args, num_images, output_dir):
+  """
+  TODO : docstring
+
+  """
+  for i in range(num_images):
+    # number of objects to be generated
+    num_objects = random.randint(3, 6)
+    # render base image
+    json_base = render_scene_deterministic(args=args, num_objects=num_objects, output_index=i, output_split='test', output_dir=output_dir, const=('Rubber', 'rubber'))
+    render_from_json(args, output_index=i, output_split='test', output_dir=output_dir, json_file=json_base, const=('MyMetal', 'metal'))
+    
+    
 def create_pair(args, num_images, output_dir):
   """
   TODO : docstring
@@ -445,7 +460,8 @@ def render_from_json(
     output_split='test',
     output_dir='output',
     json_file=None, 
-    json_path=None, 
+    json_path=None,
+    const=None,
     aug=None):
 
   assert json_file or json_path, "Either json_file or json_path must be specified"
@@ -464,8 +480,8 @@ def render_from_json(
   # Set render arguments so we can get pixel coordinates later.
   # We use functionality specific to the CYCLES renderer so BLENDER_RENDER
   # cannot be used.
-  output_scene = os.path.join(*[output_dir, 'aug', 'scenes', str(output_index).zfill(4)+'.json'])
-  output_image = os.path.join(*[output_dir, 'aug', 'images', str(output_index).zfill(4)+'.png'])
+  output_scene = os.path.join(*[output_dir, const[1], 'scenes', str(output_index).zfill(6)+'.json'])
+  output_image = os.path.join(*[output_dir, const[1], 'images', str(output_index).zfill(6)+'.png'])
   render_args = bpy.context.scene.render
   render_args.engine = "CYCLES"
   render_args.filepath = output_image
@@ -535,8 +551,8 @@ def render_from_json(
   
   objects = []
   blender_objects = []
-
-  assert len(scene_struct['objects']) == len(aug), "Object number mismatch"
+  if aug is not None:
+    assert len(scene_struct['objects']) == len(aug), "Object number mismatch"
   for i, object_info in enumerate(scene_struct['objects']):
     # print(object_info)
     color = object_info['color']
@@ -567,17 +583,22 @@ def render_from_json(
     obj = bpy.context.object
     blender_objects.append(obj)
     pixel_coords = utils.get_camera_coords(camera, obj.location)
+    if const is None:
+      mat_name, mat_name_out = mat2name[material], material
+    else:
+      mat_name, mat_name_out = const
+      
     objects.append({
       'shape': shape,
       'size': size_num,
-      'material': material,
+      'material': mat_name_out,
       '3d_coords': tuple(obj.location),
       'rotation': rotation,
       'pixel_coords': pixel_coords,
       'color': rgba,
     })
-
-    utils.add_material(mat2name[material], Color=rgba)
+    
+    utils.add_material(mat_name, Color=rgba)
 
   scene_struct['objects'] = objects
   scene_struct['relationships'] = compute_all_relationships(scene_struct)
@@ -590,9 +611,9 @@ def render_from_json(
       print(e)
 
   # makedir
-  image_dir = os.path.join(*[output_dir, 'aug', 'images'])
-  scene_dir = os.path.join(*[output_dir, 'aug', 'scenes'])
-  mask_dir = os.path.join(*[output_dir, 'aug', 'masks'])
+  image_dir = os.path.join(*[output_dir, const[1], 'images'])
+  scene_dir = os.path.join(*[output_dir, const[1], 'scenes'])
+  mask_dir = os.path.join(*[output_dir, const[1], 'masks'])
 
   os.makedirs(image_dir, exist_ok=True)
   os.makedirs(scene_dir, exist_ok=True)
@@ -602,10 +623,10 @@ def render_from_json(
     json.dump(scene_struct, f, indent=2)
 
   for i, o in enumerate(blender_objects):
-    path = os.path.join(mask_dir, str(output_index).zfill(4) + '_' + str(i+1) + '.png')
+    path = os.path.join(mask_dir, str(output_index).zfill(6) + '_' + str(i+1) + '.png')
     render_mask([o], path, whole=False)
     
-  path = os.path.join(mask_dir, str(output_index).zfill(4) + '_0.png')
+  path = os.path.join(mask_dir, str(output_index).zfill(6) + '_0.png')
   render_mask(blender_objects, path, whole=True)
 
 def render_scene(args,
@@ -729,7 +750,7 @@ def render_scene(args,
     bpy.ops.wm.save_as_mainfile(filepath=output_blendfile)
 
 
-def add_random_objects(scene_struct, num_objects, args, camera):
+def add_random_objects(scene_struct, num_objects, args, camera, const=None):
   """
   Add random objects to the current blender scene
   """
@@ -768,7 +789,7 @@ def add_random_objects(scene_struct, num_objects, args, camera):
       if num_tries > args.max_retries:
         for obj in blender_objects:
           utils.delete_object(obj)
-        return add_random_objects(scene_struct, num_objects, args, camera)
+        return add_random_objects(scene_struct, num_objects, args, camera, const=const)
       x = random.uniform(-3, 3)
       y = random.uniform(-3, 3)
       # Check to make sure the new object is further than min_dist from all
@@ -817,9 +838,14 @@ def add_random_objects(scene_struct, num_objects, args, camera):
     utils.add_object(args.shape_dir, obj_name, r, (x, y), theta=theta)
     obj = bpy.context.object
     blender_objects.append(obj)
+    
     positions.append((x, y, r))
     # Attach a random material
-    mat_name, mat_name_out = random.choice(material_mapping)
+    if const is None:
+      mat_name, mat_name_out = random.choice(material_mapping)
+    else:
+      mat_name, mat_name_out = const
+      
     utils.add_material(mat_name, Color=rgba)
 
     # Record data about the object in the scene data structure
@@ -842,7 +868,7 @@ def add_random_objects(scene_struct, num_objects, args, camera):
     print('Some objects are occluded; replacing objects')
     for obj in blender_objects:
       utils.delete_object(obj)
-    return add_random_objects(scene_struct, num_objects, args, camera)
+    return add_random_objects(scene_struct, num_objects, args, camera, const=const)
 
   return objects, blender_objects
 
@@ -968,7 +994,7 @@ if __name__ == '__main__':
     argv = utils.extract_args()
     args = parser.parse_args(argv)
     # main(args)
-    create_pair(args, num_images=300, output_dir='rebuttal_test')
+    create_same_pair(args, num_images=30000, output_dir='rebuttal_material')
     # render_from_json(args, '/workspace/clevr-dataset-gen/output/scenes/CLEVR_new_000008.json')
   elif '--help' in sys.argv or '-h' in sys.argv:
     parser.print_help()

@@ -993,10 +993,10 @@ if __name__ == '__main__':
     # Run normally
     argv = utils.extract_args()
     args = parser.parse_args(argv)
-    # main(args)
-    start_idx = 0
-    create_same_pair(args, num_images=10000, output_dir='rebuttal_material', start_idx=start_idx)
-    # render_from_json(args, '/workspace/clevr-dataset-gen/output/scenes/CLEVR_new_000008.json')
+
+    start_idx = 0 # 이부분 노션 보시고 세팅
+    create_same_pair(args, num_images=1000, output_dir='rebuttal_material', start_idx=start_idx)
+
   elif '--help' in sys.argv or '-h' in sys.argv:
     parser.print_help()
   else:

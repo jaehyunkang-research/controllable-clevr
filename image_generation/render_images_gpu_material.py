@@ -400,12 +400,12 @@ def render_scene_deterministic(
 
   return scene_struct
 
-def create_same_pair(args, num_images, output_dir):
+def create_same_pair(args, num_images, output_dir, start_idx=0):
   """
   TODO : docstring
 
   """
-  for i in range(num_images):
+  for i in range(start_idx, start_idx+num_images):
     # number of objects to be generated
     num_objects = random.randint(3, 6)
     # render base image
@@ -994,7 +994,8 @@ if __name__ == '__main__':
     argv = utils.extract_args()
     args = parser.parse_args(argv)
     # main(args)
-    create_same_pair(args, num_images=30000, output_dir='rebuttal_material')
+    start_idx = 0
+    create_same_pair(args, num_images=10000, output_dir='rebuttal_material', start_idx=start_idx)
     # render_from_json(args, '/workspace/clevr-dataset-gen/output/scenes/CLEVR_new_000008.json')
   elif '--help' in sys.argv or '-h' in sys.argv:
     parser.print_help()

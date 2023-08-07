@@ -1017,7 +1017,7 @@ if __name__ == '__main__':
     args = parser.parse_args(argv)
 
     start_idx = 0 # 이부분 노션 보시고 세팅
-    create_same_tri(args, num_images=5, output_dir='rebuttal_shape_test', start_idx=start_idx)
+    create_same_tri(args, num_images=3300, output_dir='rebuttal_shape', start_idx=start_idx)
 
   elif '--help' in sys.argv or '-h' in sys.argv:
     parser.print_help()
